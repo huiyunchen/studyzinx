@@ -3,13 +3,22 @@ package core
 import (
 	"fmt"
 	"math/rand"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/aceld/zinx/ziface"
+	"github.com/aceld/zinx/zinx_app_demo/mmo_game/db"
 	"github.com/aceld/zinx/zinx_app_demo/mmo_game/pb"
 	"github.com/golang/protobuf/proto"
 )
+
+type UserInfo struct {
+	ID     uint `gorm:"primaryKey“`
+	Name   string
+	Gender string
+	Hobby  string
+}
 
 //玩家对象
 type Player struct {
@@ -36,7 +45,7 @@ func NewPlayer(conn ziface.IConnection) *Player {
 	IDLock.Unlock()
 
 	p := &Player{
-		PID:  ID,
+		PID:  int32(ID),
 		Conn: conn,
 		X:    float32(160 + rand.Intn(50)), //随机在160坐标点 基于X轴偏移若干坐标
 		Y:    0,                            //高度为0
@@ -133,14 +142,29 @@ func (p *Player) SyncSurrounding() {
 
 //广播玩家聊天
 func (p *Player) Talk(content string) {
+	myXY := fmt.Sprintf("(x:%.2f,y:%.2f)", p.X, p.Y)
 	//1. 组建MsgID200 proto数据
 	msg := &pb.BroadCast{
 		PID: p.PID,
 		Tp:  1, //TP 1 代表聊天广播
 		Data: &pb.BroadCast_Content{
-			Content: content,
+			Content: content + myXY,
 		},
 	}
+
+	serverID, err := strconv.ParseInt(content, 10, 32)
+	if err != nil {
+		panic(err)
+	}
+	if serverID == 2 {
+		serverID = 2
+	} else {
+		serverID = 1
+	}
+	dbConn := db.GetDB(serverID)
+	user := UserInfo{Name: "Jinzhu", Gender: "man", Hobby: content}
+	result := dbConn.Create(&user) // 通过数据的指针来创建
+	fmt.Println("数据插入情况", result, "ID为：", user.ID)
 
 	//2. 得到当前世界所有的在线玩家
 	players := WorldMgrObj.GetAllPlayers()
